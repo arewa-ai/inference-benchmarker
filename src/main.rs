@@ -54,6 +54,10 @@ struct Args {
     /// Disable console UI
     #[clap(short, long, env)]
     no_console: bool,
+
+    /// Disable SSL certificate verification
+    #[clap(long, env)]
+    insecure: bool,
     /// Constraints for prompt length.
     /// No value means use the input prompt as defined in input dataset.
     /// We sample the number of tokens to generate from a normal distribution.
@@ -226,6 +230,7 @@ async fn main() {
         hf_token,
         model_name,
         run_id,
+        insecure: args.insecure,
     };
     let main_thread = tokio::spawn(async move {
         match run(run_config, stop_sender_clone).await {
