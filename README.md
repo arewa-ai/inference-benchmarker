@@ -147,6 +147,21 @@ inference-benchmarker \
     --decode-options "num_tokens=200,max_tokens=220,min_tokens=180,variance=10"
 ```
 
+#### Connection configuration
+
+You can configure how the benchmarker connects to your inference server:
+
+- `--url`: The base URL of the inference server (default: `http://localhost:8000`).
+- `--api-key`: The API key to use for authentication (header `Authorization: Bearer <key>`).
+- `--insecure`: Disable SSL certificate verification. Useful for testing against servers with self-signed certificates or when proxied through services with untrusted certs.
+
+```shell
+inference-benchmarker \
+    --url https://internal-api.example.com \
+    --insecure \
+    ...
+```
+
 #### Dataset configuration
 
 Prompts are sampled for a Hugging Face dataset file, using a [subset of ShareGPT
