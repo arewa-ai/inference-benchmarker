@@ -89,7 +89,7 @@ pub struct OpenAITextGenerationResponse {
     pub choices: Vec<OpenAITextGenerationChoice>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpenAITextGenerationRequest {
     pub model: String,
     pub messages: Vec<OpenAITextGenerationMessage>,
@@ -110,6 +110,7 @@ impl OpenAITextGenerationBackend {
     ) -> anyhow::Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(timeout)
+            .user_agent(format!("inference-benchmarker/{}", env!("CARGO_PKG_VERSION")))
             .danger_accept_invalid_certs(insecure)
             .build()
             .map_err(|e| anyhow::anyhow!("Error creating HTTP client: {e}"))?;
@@ -150,6 +151,12 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
             stop: None,
             temperature: 0.0,
         };
+        debug!("Sending request to: {}", url);
+        debug!("Request body: {:?}", body);
+        debug!(
+            "Request Authorization: Bearer {}****",
+            &self.api_key.chars().take(10).collect::<String>()
+        );
         let req = self
             .client
             .post(url)
@@ -165,8 +172,9 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
         let mut final_response = "".to_string();
         while let Some(event) = es.next().await {
             match event {
-                Ok(Event::Open) => trace!("SSE connection opened"),
+                Ok(Event::Open) => debug!("SSE connection opened"),
                 Ok(Event::Message(message)) => {
+                    debug!("Received message: {}", message.data);
                     if message.data == "\n" || message.data == "[DONE]" {
                         aggregated_response.stop();
                         continue;
@@ -189,6 +197,9 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                             }
                         };
                     let choices = oai_response.choices;
+                    if choices.is_empty() {
+                        continue;
+                    }
                     let content = choices[0]
                         .clone()
                         .delta
@@ -222,6 +233,7 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                     };
                 }
                 Err(e) => {
+                    debug!("EventSource error: {:?}", e);
                     match e {
                         Error::Utf8(_) => {
                             aggregated_response.fail();
