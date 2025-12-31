@@ -106,9 +106,11 @@ impl OpenAITextGenerationBackend {
         model_name: String,
         tokenizer: Arc<Tokenizer>,
         timeout: time::Duration,
+        insecure: bool,
     ) -> anyhow::Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(timeout)
+            .danger_accept_invalid_certs(insecure)
             .build()
             .map_err(|e| anyhow::anyhow!("Error creating HTTP client: {e}"))?;
         Ok(Self {
@@ -130,7 +132,10 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
         sender: Sender<TextGenerationAggregatedResponse>,
     ) {
         let mut url = self.base_url.clone();
-        url.set_path("/v1/chat/completions");
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
         // let url = format!("{base_url}", base_url = self.base_url);
         let mut aggregated_response = TextGenerationAggregatedResponse::new(request.clone());
         let messages = vec![OpenAITextGenerationMessage {
@@ -840,6 +845,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -901,6 +907,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -986,6 +993,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1032,6 +1040,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1078,6 +1087,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1128,6 +1138,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             Duration::from_secs(1),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1364,5 +1375,39 @@ mod tests {
         // check that next turn is a first turn
         let req = generator.generate_request();
         assert_eq!(req.prompt, "You are a helpful assistant.");
+    }
+
+    /// Test that URL joining logic works as expected
+    #[test]
+    fn test_url_joining() {
+        let base = Url::parse("https://api.arewa.ai").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(url.as_str(), "https://api.arewa.ai/v1/chat/completions");
+
+        let base = Url::parse("https://api.arewa.ai/inference").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://api.arewa.ai/inference/v1/chat/completions"
+        );
+
+        let base = Url::parse("https://api.arewa.ai/inference/").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://api.arewa.ai/inference/v1/chat/completions"
+        );
     }
 }
