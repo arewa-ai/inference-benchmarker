@@ -56,7 +56,11 @@ If you have [cargo](https://rustup.rs/) already installed:
 cargo install --git https://github.com/arewa-ai/inference-benchmarker.git
 ```
 
-Or you can run docker images.
+Or you can run docker images (only for Arewa developers):
+
+```bash
+docker pull 419177720094.dkr.ecr.mx-central-1.amazonaws.com/arewa/inference-benchmarker:0.1.0
+```
 
 ### Run a benchmark
 
@@ -92,6 +96,18 @@ docker run --runtime nvidia --gpus all \
 inference-benchmarker \
     --tokenizer-name "meta-llama/Llama-3.1-8B-Instruct" \
     --url http://localhost:8080 \
+    --profile chat
+```
+
+#### 2. Run a benchmark using Docker image
+
+```shell
+docker run --rm -it \
+    -e OPENAI_API_KEY=$OPENAI_API_KEY \
+    419177720094.dkr.ecr.mx-central-1.amazonaws.com/arewa/inference-benchmarker:0.1.0 \
+    inference-benchmarker \
+    --tokenizer-name "meta-llama/Llama-3.1-8B-Instruct" \
+    --url http://host.docker.internal:8080 \
     --profile chat
 ```
 
@@ -250,6 +266,18 @@ You need [Rust](https://rustup.rs/) installed to build the benchmarking tool.
 
 ```shell
 $ make build
+```
+
+### Build and Push Docker Image
+
+You can use the `justfile` to build and push the Docker image to the ECR registry:
+
+```shell
+# 1. Login to ECR
+$ just ecr-login
+
+# 2. Build and push (replace <tag> with your version, e.g. 0.1.0)
+$ just build-push 0.1.0
 ```
 
 ## Frequently Asked Questions
