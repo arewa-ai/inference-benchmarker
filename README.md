@@ -53,10 +53,8 @@ It can be used to benchmark any text generation server that exposes an OpenAI-co
 
 If you have [cargo](https://rustup.rs/) already installed:
 ```bash
-cargo install --git https://github.com/huggingface/inference-benchmarker/
+cargo install --git https://github.com/arewa-ai/inference-benchmarker.git
 ```
-
-Or download the [latest released binary](https://github.com/huggingface/inference-benchmarker/releases/latest)
 
 Or you can run docker images.
 
