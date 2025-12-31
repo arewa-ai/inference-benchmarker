@@ -203,6 +203,13 @@ async fn main() {
         Some(token) => Some(token),
         None => cache.token(),
     };
+    // Fallback to OPENAI_API_KEY if api_key is not set
+    let api_key = if args.api_key.is_empty() {
+        std::env::var("OPENAI_API_KEY").unwrap_or_default()
+    } else {
+        args.api_key
+    };
+
     let model_name = args
         .model_name
         .clone()
@@ -212,7 +219,7 @@ async fn main() {
         .unwrap_or(uuid::Uuid::new_v4().to_string()[..7].to_string());
     let run_config = RunConfiguration {
         url: args.url,
-        api_key: args.api_key,
+        api_key,
         profile: args.profile.clone(),
         tokenizer_name: args.tokenizer_name.clone(),
         max_vus: args.max_vus,
