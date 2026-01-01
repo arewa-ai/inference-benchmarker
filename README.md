@@ -253,9 +253,8 @@ Slurm example is provided in `extra/slurm`.
 You can use the provided Gradio app to quickly visualize the results.
 Considering that JSON results files are in `/path/to/results/dir`:
 ```shell
-$ poetry install
 $ cd extra/dashboard
-$ poetry run python app.py --from-results-dir /path/to/results/dir
+$ uv run app.py --from-results-dir /path/to/results/dir
 ```
 
 ![dashboard.png](assets/dashboard.png)
