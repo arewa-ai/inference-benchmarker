@@ -58,6 +58,11 @@ struct Args {
     /// Disable SSL certificate verification
     #[clap(long, env)]
     insecure: bool,
+
+    /// Timeout for individual requests
+    #[clap(default_value = "600s", long, env)]
+    #[arg(value_parser = parse_duration)]
+    request_timeout: Duration,
     /// Constraints for prompt length.
     /// No value means use the input prompt as defined in input dataset.
     /// We sample the number of tokens to generate from a normal distribution.
@@ -238,6 +243,7 @@ async fn main() {
         model_name,
         run_id,
         insecure: args.insecure,
+        request_timeout: args.request_timeout,
     };
     let main_thread = tokio::spawn(async move {
         match run(run_config, stop_sender_clone).await {

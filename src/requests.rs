@@ -75,6 +75,7 @@ pub struct OpenAITextGenerationMessage {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpenAITextGenerationDelta {
     pub content: Option<String>,
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -206,14 +207,21 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                         .unwrap()
                         .content
                         .unwrap_or("".to_string());
-                    if content.is_empty() {
+                    let reasoning_content = choices[0]
+                        .clone()
+                        .delta
+                        .unwrap()
+                        .reasoning_content
+                        .unwrap_or("".to_string());
+                    if content.is_empty() && reasoning_content.is_empty() {
                         // skip empty responses
                         continue;
-                    }
+                    } 
+                    let combined_content = format!("{}{}", content, reasoning_content);
                     // we need to count the number of tokens generated as each delta chunk may contain multiple tokens
                     // that's the case with vLLM chunked prefill or speculative decoding
                     let num_tokens =
-                        self.tokenizer.encode(content.clone(), false).unwrap().len() as u64;
+                        self.tokenizer.encode(combined_content.clone(), false).unwrap().len() as u64;
                     if num_tokens > 1 {
                         warn!(
                             "Generated more than one token: {num_tokens}",
@@ -222,8 +230,9 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                     }
                     match choices[0].clone().finish_reason {
                         None => {
+                            debug!("Token count: {}", num_tokens);
                             aggregated_response.add_tokens(num_tokens);
-                            final_response += content.as_str();
+                            final_response += combined_content.as_str();
                         }
                         Some(_) => {
                             aggregated_response.add_tokens(num_tokens);
