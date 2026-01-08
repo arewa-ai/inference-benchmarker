@@ -56,10 +56,10 @@ If you have [cargo](https://rustup.rs/) already installed:
 cargo install --git https://github.com/arewa-ai/inference-benchmarker.git
 ```
 
-Or you can run docker images (only for Arewa developers):
+Or you can run docker images:
 
 ```bash
-docker pull 419177720094.dkr.ecr.mx-central-1.amazonaws.com/arewa/inference-benchmarker:0.1.0
+docker pull <your-docker-image-repository>
 ```
 
 ### Run a benchmark
@@ -104,7 +104,7 @@ inference-benchmarker \
 ```shell
 docker run --rm -it \
     -e OPENAI_API_KEY=$OPENAI_API_KEY \
-    419177720094.dkr.ecr.mx-central-1.amazonaws.com/arewa/inference-benchmarker:0.1.0 \
+    <your-docker-image-repository> \
     inference-benchmarker \
     --tokenizer-name "meta-llama/Llama-3.1-8B-Instruct" \
     --url http://host.docker.internal:8080 \
