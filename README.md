@@ -53,12 +53,14 @@ It can be used to benchmark any text generation server that exposes an OpenAI-co
 
 If you have [cargo](https://rustup.rs/) already installed:
 ```bash
-cargo install --git https://github.com/huggingface/inference-benchmarker/
+cargo install --git https://github.com/arewa-ai/inference-benchmarker.git
 ```
 
-Or download the [latest released binary](https://github.com/huggingface/inference-benchmarker/releases/latest)
+Or you can run docker images:
 
-Or you can run docker images.
+```bash
+docker pull <your-docker-image-repository>
+```
 
 ### Run a benchmark
 
@@ -94,6 +96,18 @@ docker run --runtime nvidia --gpus all \
 inference-benchmarker \
     --tokenizer-name "meta-llama/Llama-3.1-8B-Instruct" \
     --url http://localhost:8080 \
+    --profile chat
+```
+
+#### 2. Run a benchmark using Docker image
+
+```shell
+docker run --rm -it \
+    -e OPENAI_API_KEY=$OPENAI_API_KEY \
+    <your-docker-image-repository> \
+    inference-benchmarker \
+    --tokenizer-name "meta-llama/Llama-3.1-8B-Instruct" \
+    --url http://host.docker.internal:8080 \
     --profile chat
 ```
 
@@ -145,6 +159,21 @@ inference-benchmarker \
     --rates 10.0 \
     --prompt-options "num_tokens=200,max_tokens=220,min_tokens=180,variance=10" \
     --decode-options "num_tokens=200,max_tokens=220,min_tokens=180,variance=10"
+```
+
+#### Connection configuration
+
+You can configure how the benchmarker connects to your inference server:
+
+- `--url`: The base URL of the inference server (default: `http://localhost:8000`).
+- `--api-key`: The API key to use for authentication (header `Authorization: Bearer <key>`).
+- `--insecure`: Disable SSL certificate verification. Useful for testing against servers with self-signed certificates or when proxied through services with untrusted certs.
+
+```shell
+inference-benchmarker \
+    --url https://internal-api.example.com \
+    --insecure \
+    ...
 ```
 
 #### Dataset configuration
@@ -224,9 +253,8 @@ Slurm example is provided in `extra/slurm`.
 You can use the provided Gradio app to quickly visualize the results.
 Considering that JSON results files are in `/path/to/results/dir`:
 ```shell
-$ poetry install
 $ cd extra/dashboard
-$ poetry run python app.py --from-results-dir /path/to/results/dir
+$ uv run app.py --from-results-dir /path/to/results/dir
 ```
 
 ![dashboard.png](assets/dashboard.png)
@@ -237,6 +265,18 @@ You need [Rust](https://rustup.rs/) installed to build the benchmarking tool.
 
 ```shell
 $ make build
+```
+
+### Build and Push Docker Image
+
+You can use the `justfile` to build and push the Docker image to the ECR registry:
+
+```shell
+# 1. Login to ECR
+$ just ecr-login
+
+# 2. Build and push (replace <tag> with your version, e.g. 0.1.0)
+$ just build-push 0.1.0
 ```
 
 ## Frequently Asked Questions

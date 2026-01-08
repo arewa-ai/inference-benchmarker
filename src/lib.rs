@@ -52,6 +52,8 @@ pub struct RunConfiguration {
     pub extra_metadata: Option<HashMap<String, String>>,
     pub model_name: String,
     pub run_id: String,
+    pub insecure: bool,
+    pub request_timeout: std::time::Duration,
 }
 
 pub async fn run(mut run_config: RunConfiguration, stop_sender: Sender<()>) -> anyhow::Result<()> {
@@ -90,7 +92,8 @@ pub async fn run(mut run_config: RunConfiguration, stop_sender: Sender<()>) -> a
         run_config.url,
         run_config.model_name.clone(),
         tokenizer,
-        run_config.duration,
+        run_config.request_timeout,
+        run_config.insecure,
     )?;
 
     let config = BenchmarkConfig {

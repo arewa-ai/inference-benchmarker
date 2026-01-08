@@ -75,6 +75,7 @@ pub struct OpenAITextGenerationMessage {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpenAITextGenerationDelta {
     pub content: Option<String>,
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -89,7 +90,7 @@ pub struct OpenAITextGenerationResponse {
     pub choices: Vec<OpenAITextGenerationChoice>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OpenAITextGenerationRequest {
     pub model: String,
     pub messages: Vec<OpenAITextGenerationMessage>,
@@ -106,9 +107,12 @@ impl OpenAITextGenerationBackend {
         model_name: String,
         tokenizer: Arc<Tokenizer>,
         timeout: time::Duration,
+        insecure: bool,
     ) -> anyhow::Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(timeout)
+            .user_agent(format!("inference-benchmarker/{}", env!("CARGO_PKG_VERSION")))
+            .danger_accept_invalid_certs(insecure)
             .build()
             .map_err(|e| anyhow::anyhow!("Error creating HTTP client: {e}"))?;
         Ok(Self {
@@ -130,7 +134,10 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
         sender: Sender<TextGenerationAggregatedResponse>,
     ) {
         let mut url = self.base_url.clone();
-        url.set_path("/v1/chat/completions");
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
         // let url = format!("{base_url}", base_url = self.base_url);
         let mut aggregated_response = TextGenerationAggregatedResponse::new(request.clone());
         let messages = vec![OpenAITextGenerationMessage {
@@ -145,6 +152,12 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
             stop: None,
             temperature: 0.0,
         };
+        debug!("Sending request to: {}", url);
+        debug!("Request body: {:?}", body);
+        debug!(
+            "Request Authorization: Bearer {}****",
+            &self.api_key.chars().take(10).collect::<String>()
+        );
         let req = self
             .client
             .post(url)
@@ -160,8 +173,9 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
         let mut final_response = "".to_string();
         while let Some(event) = es.next().await {
             match event {
-                Ok(Event::Open) => trace!("SSE connection opened"),
+                Ok(Event::Open) => debug!("SSE connection opened"),
                 Ok(Event::Message(message)) => {
+                    debug!("Received message: {}", message.data);
                     if message.data == "\n" || message.data == "[DONE]" {
                         aggregated_response.stop();
                         continue;
@@ -184,20 +198,30 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                             }
                         };
                     let choices = oai_response.choices;
+                    if choices.is_empty() {
+                        continue;
+                    }
                     let content = choices[0]
                         .clone()
                         .delta
                         .unwrap()
                         .content
                         .unwrap_or("".to_string());
-                    if content.is_empty() {
+                    let reasoning_content = choices[0]
+                        .clone()
+                        .delta
+                        .unwrap()
+                        .reasoning_content
+                        .unwrap_or("".to_string());
+                    if content.is_empty() && reasoning_content.is_empty() {
                         // skip empty responses
                         continue;
-                    }
+                    } 
+                    let combined_content = format!("{}{}", content, reasoning_content);
                     // we need to count the number of tokens generated as each delta chunk may contain multiple tokens
                     // that's the case with vLLM chunked prefill or speculative decoding
                     let num_tokens =
-                        self.tokenizer.encode(content.clone(), false).unwrap().len() as u64;
+                        self.tokenizer.encode(combined_content.clone(), false).unwrap().len() as u64;
                     if num_tokens > 1 {
                         warn!(
                             "Generated more than one token: {num_tokens}",
@@ -206,8 +230,9 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                     }
                     match choices[0].clone().finish_reason {
                         None => {
+                            debug!("Token count: {}", num_tokens);
                             aggregated_response.add_tokens(num_tokens);
-                            final_response += content.as_str();
+                            final_response += combined_content.as_str();
                         }
                         Some(_) => {
                             aggregated_response.add_tokens(num_tokens);
@@ -217,6 +242,7 @@ impl TextGenerationBackend for OpenAITextGenerationBackend {
                     };
                 }
                 Err(e) => {
+                    debug!("EventSource error: {:?}", e);
                     match e {
                         Error::Utf8(_) => {
                             aggregated_response.fail();
@@ -840,6 +866,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -901,6 +928,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -986,6 +1014,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1032,6 +1061,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1078,6 +1108,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1128,6 +1159,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             Duration::from_secs(1),
+            false,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1364,5 +1396,39 @@ mod tests {
         // check that next turn is a first turn
         let req = generator.generate_request();
         assert_eq!(req.prompt, "You are a helpful assistant.");
+    }
+
+    /// Test that URL joining logic works as expected
+    #[test]
+    fn test_url_joining() {
+        let base = Url::parse("https://api.arewa.ai").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(url.as_str(), "https://api.arewa.ai/v1/chat/completions");
+
+        let base = Url::parse("https://api.arewa.ai/inference").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://api.arewa.ai/inference/v1/chat/completions"
+        );
+
+        let base = Url::parse("https://api.arewa.ai/inference/").unwrap();
+        let mut url = base.clone();
+        if !url.path().ends_with('/') {
+            url.set_path(&format!("{}/", url.path()));
+        }
+        url = url.join("v1/chat/completions").unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://api.arewa.ai/inference/v1/chat/completions"
+        );
     }
 }

@@ -240,6 +240,7 @@ mod tests {
             "gpt2".to_string(),
             tokenizer,
             time::Duration::from_secs(10),
+            false,
         )
         .unwrap();
         let requests_generator = Arc::from(Mutex::from(

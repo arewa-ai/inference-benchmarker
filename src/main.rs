@@ -54,6 +54,15 @@ struct Args {
     /// Disable console UI
     #[clap(short, long, env)]
     no_console: bool,
+
+    /// Disable SSL certificate verification
+    #[clap(long, env)]
+    insecure: bool,
+
+    /// Timeout for individual requests
+    #[clap(default_value = "600s", long, env)]
+    #[arg(value_parser = parse_duration)]
+    request_timeout: Duration,
     /// Constraints for prompt length.
     /// No value means use the input prompt as defined in input dataset.
     /// We sample the number of tokens to generate from a normal distribution.
@@ -199,6 +208,13 @@ async fn main() {
         Some(token) => Some(token),
         None => cache.token(),
     };
+    // Fallback to OPENAI_API_KEY if api_key is not set
+    let api_key = if args.api_key.is_empty() {
+        std::env::var("OPENAI_API_KEY").unwrap_or_default()
+    } else {
+        args.api_key
+    };
+
     let model_name = args
         .model_name
         .clone()
@@ -208,7 +224,7 @@ async fn main() {
         .unwrap_or(uuid::Uuid::new_v4().to_string()[..7].to_string());
     let run_config = RunConfiguration {
         url: args.url,
-        api_key: args.api_key,
+        api_key,
         profile: args.profile.clone(),
         tokenizer_name: args.tokenizer_name.clone(),
         max_vus: args.max_vus,
@@ -226,6 +242,8 @@ async fn main() {
         hf_token,
         model_name,
         run_id,
+        insecure: args.insecure,
+        request_timeout: args.request_timeout,
     };
     let main_thread = tokio::spawn(async move {
         match run(run_config, stop_sender_clone).await {
