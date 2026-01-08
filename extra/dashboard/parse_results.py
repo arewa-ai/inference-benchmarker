@@ -31,6 +31,14 @@ def build_df(model: str, data_files: dict[str, str]) -> pd.DataFrame:
                 # replace . with _ in column names
                 df_tmp.columns = [c.replace('.', '_') for c in df_tmp.columns]
 
+                # For throughput benchmarks (ConstantVUs), rate is often None.
+                # Use request_rate (achieved QPS) if rate is None.
+                if 'rate' in df_tmp.columns and (df_tmp['rate'].isnull().all() or df_tmp['rate'].iloc[0] is None):
+                     if 'request_rate' in df_tmp.columns:
+                         df_tmp['rate'] = df_tmp['request_rate']
+                elif 'rate' not in df_tmp.columns and 'request_rate' in df_tmp.columns:
+                     df_tmp['rate'] = df_tmp['request_rate']
+
                 df = pd.concat([df, df_tmp])
     return df
 

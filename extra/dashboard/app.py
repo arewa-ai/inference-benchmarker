@@ -17,6 +17,16 @@ class PlotConfig:
     percentiles: List[float] = None
 
 
+
+def load_bench_results(source) -> pd.DataFrame:
+    data = pd.read_parquet(source)
+    # remove warmup
+    data = data[data['id'] != 'warmup']
+    # keep constant rate and constant VUs
+    data = data[(data['executor_type'] == 'ConstantArrivalRate') | (data['executor_type'] == 'ConstantVUs')]
+    return data
+
+
 def run(from_results_dir, datasource, port):
     css = '''
     .summary span {
@@ -82,13 +92,7 @@ def run(from_results_dir, datasource, port):
             columns=column_mappings)
         return data
 
-    def load_bench_results(source) -> pd.DataFrame:
-        data = pd.read_parquet(source)
-        # remove warmup and throughput
-        data = data[(data['id'] != 'warmup') & (data['id'] != 'throughput')]
-        # only keep constant rate
-        data = data[data['executor_type'] == 'ConstantArrivalRate']
-        return data
+
 
     def select_region(selection: gr.SelectData, model):
         min_w, max_w = selection.index
@@ -163,7 +167,11 @@ def run(from_results_dir, datasource, port):
         with gr.Row():
             details_desc = gr.Markdown("## Details")
         with gr.Row():
-            model = gr.Dropdown(list(models), label="Select model", value=models[0])
+            if len(models) > 0:
+                model = gr.Dropdown(list(models), label="Select model", value=models[0])
+            else:
+                model = gr.Dropdown([], label="Select model", value=None)
+                gr.Warning("No data found matching criteria")
         with gr.Row():
             percentiles_bench = gr.Radio(percentiles, label="", value="avg")
         i = 0
