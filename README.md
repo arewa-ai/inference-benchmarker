@@ -168,11 +168,12 @@ You can configure how the benchmarker connects to your inference server:
 - `--url`: The base URL of the inference server (default: `http://localhost:8000`).
 - `--api-key`: The API key to use for authentication (header `Authorization: Bearer <key>`).
 - `--insecure`: Disable SSL certificate verification. Useful for testing against servers with self-signed certificates or when proxied through services with untrusted certs.
+- `--host-resolve`: Override DNS resolution for a specific host. Useful when testing servers that expect a specific Host header but are accessible at a different IP. Format: `hostname:ip` or `hostname:ip:port`.
 
 ```shell
 inference-benchmarker \
-    --url https://internal-api.example.com \
-    --insecure \
+    --url https://api.arewa.ai/inference/v1 \
+    --host-resolve api.arewa.ai:127.0.0.1 \
     ...
 ```
 

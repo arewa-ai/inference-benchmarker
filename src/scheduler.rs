@@ -241,6 +241,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let requests_generator = Arc::from(Mutex::from(

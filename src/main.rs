@@ -59,6 +59,11 @@ struct Args {
     #[clap(long, env)]
     insecure: bool,
 
+    /// Override DNS resolution for a specific host.
+    /// Format: hostname:ip
+    #[clap(long, env)]
+    host_resolve: Option<String>,
+
     /// Timeout for individual requests
     #[clap(default_value = "600s", long, env)]
     #[arg(value_parser = parse_duration)]
@@ -243,6 +248,7 @@ async fn main() {
         model_name,
         run_id,
         insecure: args.insecure,
+        host_resolve: args.host_resolve,
         request_timeout: args.request_timeout,
     };
     let main_thread = tokio::spawn(async move {

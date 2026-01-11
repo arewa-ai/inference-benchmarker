@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::fmt::Display;
+use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time;
@@ -108,11 +109,43 @@ impl OpenAITextGenerationBackend {
         tokenizer: Arc<Tokenizer>,
         timeout: time::Duration,
         insecure: bool,
+        host_resolve: Option<String>,
     ) -> anyhow::Result<Self> {
-        let client = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .timeout(timeout)
-            .user_agent(format!("inference-benchmarker/{}", env!("CARGO_PKG_VERSION")))
-            .danger_accept_invalid_certs(insecure)
+            .user_agent(format!(
+                "inference-benchmarker/{}",
+                env!("CARGO_PKG_VERSION")
+            ))
+            .danger_accept_invalid_certs(insecure);
+
+        if let Some(resolve) = host_resolve {
+            let parts: Vec<&str> = resolve.split(':').collect();
+            if parts.len() < 2 {
+                return Err(anyhow::anyhow!(
+                    "Invalid host resolve format. Expected hostname:ip or hostname:ip:port"
+                ));
+            }
+            let hostname = parts[0];
+            let ip = parts[1];
+            let port = if parts.len() > 2 {
+                parts[2]
+                    .parse::<u16>()
+                    .map_err(|e| anyhow::anyhow!("Invalid port in host resolve: {e}"))?
+            } else {
+                base_url
+                    .port_or_known_default()
+                    .ok_or_else(|| anyhow::anyhow!("Could not deduce port from URL"))?
+            };
+            let addr_str = format!("{}:{}", ip, port);
+            let addr = addr_str
+                .to_socket_addrs()?
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Invalid IP address: {}", ip))?;
+            builder = builder.resolve(hostname, addr);
+        }
+
+        let client = builder
             .build()
             .map_err(|e| anyhow::anyhow!("Error creating HTTP client: {e}"))?;
         Ok(Self {
@@ -867,6 +900,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -929,6 +963,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1015,6 +1050,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1062,6 +1098,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1109,6 +1146,7 @@ mod tests {
             tokenizer,
             time::Duration::from_secs(10),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1160,6 +1198,7 @@ mod tests {
             tokenizer,
             Duration::from_secs(1),
             false,
+            None,
         )
         .unwrap();
         let request = TextGenerationRequest {
@@ -1432,3 +1471,48 @@ mod tests {
         );
     }
 }
+
+    #[tokio::test]
+    async fn test_host_resolve() {
+        let mut s = mockito::Server::new_async().await;
+        let m = s.mock("POST", "/v1/chat/completions")
+            .with_status(200)
+            .with_header("content-type", "text/event-stream")
+            .with_body("data: [DONE]\n\n")
+            .create_async().await;
+
+        let server_addr = s.socket_address();
+        let server_ip = server_addr.ip().to_string();
+        let server_port = server_addr.port();
+
+        let fake_hostname = "fake.host.local";
+        let fake_url = format!("http://{}:{}", fake_hostname, server_port).parse().unwrap();
+        let resolve_string = format!("{}:{}", fake_hostname, server_ip);
+
+        let tokenizer = Arc::new(Tokenizer::from_pretrained("gpt2", None).unwrap());
+        let backend = OpenAITextGenerationBackend::try_new(
+            "".to_string(),
+            fake_url,
+            "gpt2".to_string(),
+            tokenizer,
+            time::Duration::from_secs(10),
+            false,
+            Some(resolve_string),
+        )
+        .unwrap();
+
+        let request = TextGenerationRequest {
+            id: None,
+            prompt: "Hello".to_string(),
+            num_prompt_tokens: 1,
+            num_decode_tokens: Some(10),
+        };
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        
+        // We just want to see if the request reaches the mock server.
+        // We don't strictly need to process the response fully, but let's just call generate.
+        backend.generate(Arc::new(request), tx).await;
+        
+        // Verify mockito received the request
+        m.assert();
+    }
