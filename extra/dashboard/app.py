@@ -34,6 +34,10 @@ def run(from_results_dir, datasource, port):
         padding-top:0;
         padding-bottom:0;
     }
+    .summary td {
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
     '''
 
     summary_desc = '''
@@ -169,7 +173,8 @@ def run(from_results_dir, datasource, port):
             table = gr.DataFrame(
                 pd.DataFrame(),
                 elem_classes=["summary"],
-                datatype="markdown"
+                datatype="markdown",
+                wrap=True
             )
         with gr.Row():
             details_desc = gr.Markdown("## Details")
