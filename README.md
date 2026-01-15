@@ -62,6 +62,13 @@ Or you can run docker images:
 docker pull <your-docker-image-repository>
 ```
 
+Note:
+
+When installing locally, you might need to run:
+```
+sudo apt install libssl-dev pkg-config
+```
+
 ### Run a benchmark
 
 #### 1. Start an inference server
