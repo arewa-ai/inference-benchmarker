@@ -57,7 +57,7 @@ def run(from_results_dir, datasource, port):
     column_mappings = {'inter_token_latency_ms_p90': 'ITL P90 (ms)', 'time_to_first_token_ms_p90': 'TTFT P90 (ms)',
                        'e2e_latency_ms_p90': 'E2E P90 (ms)', 'token_throughput_secs': 'Throughput (tokens/s)',
                        'successful_requests': 'Successful requests', 'error_rate': 'Error rate (%)', 'model': 'Model',
-                       'rate': 'QPS', 'run_id': 'Run ID'}
+                       'rate': 'QPS', 'run_id': 'Run ID', 'system_info': 'System Info', 'experiment_info': 'Experiment Info', 'details': 'Details'}
     default_df = pd.DataFrame.from_dict(
         {"rate": [1, 2], "inter_token_latency_ms_p90": [10, 20],
          "version": ["default", "default"],
@@ -80,14 +80,20 @@ def run(from_results_dir, datasource, port):
         data = df_bench.groupby(['model', 'run_id', 'rate']).agg(
             {'inter_token_latency_ms_p90': 'mean', 'time_to_first_token_ms_p90': 'mean',
              'e2e_latency_ms_p90': 'mean', 'token_throughput_secs': 'mean',
-             'successful_requests': 'mean', 'error_rate': 'mean'}).reset_index()
+             'successful_requests': 'mean', 'error_rate': 'mean',
+             'system_info': 'first', 'experiment_info': 'first', 'details': 'first'}).reset_index()
         data = data[
             ['run_id', 'model', 'rate', 'inter_token_latency_ms_p90', 'time_to_first_token_ms_p90',
              'e2e_latency_ms_p90',
-             'token_throughput_secs']]
+             'token_throughput_secs', 'system_info', 'experiment_info', 'details']]
         for metric in ['inter_token_latency_ms_p90', 'time_to_first_token_ms_p90', 'e2e_latency_ms_p90',
                        'token_throughput_secs']:
             data[metric] = data[metric].apply(lambda x: f"{x:.2f}")
+        
+        # Wrap long content in details tag for collapsible view
+        for col in ['system_info', 'experiment_info', 'details']:
+            data[col] = data[col].apply(lambda x: f"<details><summary>Show</summary>{x}</details>")
+
         data = data.rename(
             columns=column_mappings)
         return data
@@ -163,6 +169,7 @@ def run(from_results_dir, datasource, port):
             table = gr.DataFrame(
                 pd.DataFrame(),
                 elem_classes=["summary"],
+                datatype="markdown"
             )
         with gr.Row():
             details_desc = gr.Markdown("## Details")

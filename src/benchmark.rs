@@ -76,6 +76,7 @@ pub struct BenchmarkConfig {
     #[serde(rename = "meta")]
     pub extra_metadata: Option<HashMap<String, String>>,
     pub run_id: String,
+    pub args: Vec<String>,
 }
 
 impl BenchmarkConfig {

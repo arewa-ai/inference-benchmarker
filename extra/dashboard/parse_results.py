@@ -25,6 +25,27 @@ def build_df(model: str, data_files: dict[str, str]) -> pd.DataFrame:
                     entry['device'] = data['config']['meta']['device']
                 entry['model'] = data['config']['model_name']
                 entry['run_id'] = data['config']['run_id']
+
+                # Extract system info
+                if 'system' in data:
+                    system = data['system']
+                    cpu_info = system.get('cpu', ['Unknown'])[0] # Just one line
+                    os_name = system.get('os_name', 'Unknown')
+                    memory = system.get('memory', 'Unknown')
+                    gpu_info = ', '.join(system.get('gpu', ['Unknown']))
+                    entry['system_info'] = f"CPU: {cpu_info} | OS: {os_name} | Mem: {memory} | GPU: {gpu_info}"
+                else:
+                    entry['system_info'] = "N/A"
+
+                # Extract experiment info (args)
+                if 'args' in data['config']:
+                    entry['experiment_info'] = ' '.join(data['config']['args'])
+                else:
+                    entry['experiment_info'] = "N/A"
+
+                # Full JSON details
+                entry['details'] = json.dumps(data, indent=2)
+
                 df_tmp = pd.DataFrame(entry, index=[0])
                 # rename columns that start with 'config.'
                 df_tmp = df_tmp.rename(columns={c: c.split('config.')[-1] for c in df_tmp.columns})

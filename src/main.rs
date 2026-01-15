@@ -250,6 +250,7 @@ async fn main() {
         insecure: args.insecure,
         host_resolve: args.host_resolve,
         request_timeout: args.request_timeout,
+        args: std::env::args().collect(),
     };
     let main_thread = tokio::spawn(async move {
         match run(run_config, stop_sender_clone).await {

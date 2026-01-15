@@ -91,6 +91,7 @@ pub struct SystemInfo {
     pub os_version: String,
     pub kernel: String,
     pub hostname: String,
+    pub gpu: Vec<String>,
 }
 
 impl SystemInfo {
@@ -115,6 +116,29 @@ impl SystemInfo {
             os_version: System::os_version().ok_or("N/A").unwrap(),
             kernel: System::kernel_version().ok_or("N/A").unwrap(),
             hostname: System::host_name().ok_or("N/A").unwrap(),
+            gpu: {
+                let output = std::process::Command::new("nvidia-smi")
+                    .arg("-L")
+                    .output()
+                    .ok();
+                match output {
+                    Some(output) => {
+                        let output = String::from_utf8(output.stdout).unwrap_or_default();
+                        output
+                            .lines()
+                            .map(|line| {
+                                let parts: Vec<&str> = line.split(": ").collect();
+                                if parts.len() > 1 {
+                                    parts[1].split(" (UUID").next().unwrap_or("Unknown").to_string()
+                                } else {
+                                    "Unknown".to_string()
+                                }
+                            })
+                            .collect()
+                    }
+                    None => vec![],
+                }
+            },
         }
     }
 }

@@ -55,6 +55,7 @@ pub struct RunConfiguration {
     pub insecure: bool,
     pub host_resolve: Option<String>,
     pub request_timeout: std::time::Duration,
+    pub args: Vec<String>,
 }
 
 pub async fn run(mut run_config: RunConfiguration, stop_sender: Sender<()>) -> anyhow::Result<()> {
@@ -117,6 +118,7 @@ pub async fn run(mut run_config: RunConfiguration, stop_sender: Sender<()>) -> a
         profile: run_config.profile.clone(),
         extra_metadata: run_config.extra_metadata.clone(),
         run_id: run_config.run_id.clone(),
+        args: run_config.args.clone(),
     };
     config.validate()?;
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
