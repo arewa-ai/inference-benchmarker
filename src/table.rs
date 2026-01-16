@@ -46,15 +46,15 @@ pub fn results_table(benchmark: BenchmarkReport) -> anyhow::Result<tabled::Table
     builder.set_header(vec![
         "Benchmark",
         "QPS",
-        "E2E Latency (avg)",
-        "TTFT (avg)",
-        "ITL (avg)",
-        "Output Tok/s (Mdn/Mean)",
-        "Input Tok/s (Mdn/Mean)",
-        "Error Rate",
-        "Successful Requests",
-        "Prompt tokens per req (avg)",
-        "Decoded tokens per req (avg)",
+        "E2E Latency\n(avg)",
+        "TTFT\n(avg)",
+        "ITL\n(avg)",
+        "Output Tok/s\n(Mdn/Mean)",
+        "Input Tok/s\n(Mdn/Mean)",
+        "Error\nRate",
+        "Successful\nRequests",
+        "Prompt Tok\n/ Req",
+        "Decoded Tok\n/ Req",
     ]);
     let results = benchmark.get_results();
     for result in results {
