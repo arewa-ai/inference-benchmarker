@@ -445,6 +445,7 @@ mod tests {
                 profile: None,
                 extra_metadata: None,
                 run_id: "test".to_string(),
+                args: Vec::new(),
             },
             backend,
             requests_generator,

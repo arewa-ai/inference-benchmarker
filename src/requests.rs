@@ -785,6 +785,7 @@ pub struct TextGenerationAggregatedResponse {
     pub ended: bool,
     pub request: Option<Arc<TextGenerationRequest>>,
     pub response: Option<String>,
+    pub token_arrival_log: Vec<(tokio::time::Instant, u64)>,
 }
 
 impl TextGenerationAggregatedResponse {
@@ -799,6 +800,7 @@ impl TextGenerationAggregatedResponse {
             ended: false,
             request: Some(request),
             response: None,
+            token_arrival_log: Vec::new(),
         }
     }
 
@@ -813,6 +815,7 @@ impl TextGenerationAggregatedResponse {
             ended: true,
             request: None,
             response: None,
+            token_arrival_log: Vec::new(),
         }
     }
     fn start(&mut self) {
@@ -831,11 +834,13 @@ impl TextGenerationAggregatedResponse {
 
     fn add_tokens(&mut self, num_tokens: u64) {
         self.num_generated_tokens += num_tokens;
-        let time_to_generate = self.last_received_token_time.elapsed();
+        let now = tokio::time::Instant::now();
+        let time_to_generate = now.duration_since(self.last_received_token_time);
         // make the assumption that when returned simultaneously, tokens were generated at a constant rate
         time_to_generate.checked_div(num_tokens as u32).unwrap();
-        self.last_received_token_time = tokio::time::Instant::now();
+        self.last_received_token_time = now;
         self.times_to_tokens.push(time_to_generate);
+        self.token_arrival_log.push((now, num_tokens));
     }
 
     pub fn time_to_first_token(&self) -> Option<std::time::Duration> {

@@ -49,7 +49,8 @@ pub fn results_table(benchmark: BenchmarkReport) -> anyhow::Result<tabled::Table
         "E2E Latency (avg)",
         "TTFT (avg)",
         "ITL (avg)",
-        "Throughput",
+        "Output Tok/s (Mdn/Mean)",
+        "Input Tok/s (Mdn/Mean)",
         "Error Rate",
         "Successful Requests",
         "Prompt tokens per req (avg)",
@@ -67,7 +68,8 @@ pub fn results_table(benchmark: BenchmarkReport) -> anyhow::Result<tabled::Table
             "{:.2} ms",
             result.inter_token_latency_avg()?.as_micros() as f64 / 1000.0
         );
-        let throughput = format!("{:.2} tokens/sec", result.token_throughput_secs()?);
+        let throughput = format!("{:.2} / {:.2}", result.token_throughput_median_secs()?, result.token_throughput_secs()?);
+        let input_throughput = format!("{:.2} / {:.2}", result.input_token_throughput_median_secs()?, result.input_token_throughput_secs()?);
         let error_rate = result.failed_requests() as f64 / result.total_requests() as f64 * 100.0;
         let error_rate = format!("{:.2}%", error_rate);
         builder.push_record(vec![
@@ -77,6 +79,7 @@ pub fn results_table(benchmark: BenchmarkReport) -> anyhow::Result<tabled::Table
             ttft.as_str(),
             itl.as_str(),
             throughput.as_str(),
+            input_throughput.as_str(),
             error_rate.as_str(),
             format!(
                 "{}/{}",
