@@ -65,50 +65,91 @@ impl Executor for ConstantVUsExecutor {
         stop_sender: broadcast::Sender<()>,
     ) {
         let start = std::time::Instant::now();
-        // channel to handle ending VUs
-        let (end_tx, mut end_rx): (Sender<bool>, Receiver<bool>) =
-            tokio::sync::mpsc::channel(self.config.max_vus as usize);
-        let active_vus = Arc::new(AtomicI64::new(0));
-        // start all VUs
+        let mut set = tokio::task::JoinSet::new();
+
+        // start all VUs as long-lived tasks
         for _ in 0..self.config.max_vus {
-            let mut requests_guard = requests.lock().await;
-            let request = Arc::from(requests_guard.generate_request());
-            drop(requests_guard);
-            start_vu(
-                self.backend.clone(),
-                request,
-                responses_tx.clone(),
-                end_tx.clone(),
-                stop_sender.clone(),
-            )
-            .await;
-            active_vus.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let backend = self.backend.clone();
+            let responses_tx = responses_tx.clone();
+            let mut stop_receiver = stop_sender.subscribe();
+            let requests = requests.clone();
+            let duration = self.config.duration;
+
+            set.spawn(async move {
+                loop {
+                    // Check for stop signal or duration
+                    if start.elapsed() > duration {
+                        break;
+                    }
+                    // Check stop signal non-blocking
+                    if stop_receiver.try_recv().is_ok() {
+                        break;
+                    }
+
+                    // Generate request
+                    let mut requests_guard = requests.lock().await;
+                    let request = Arc::from(requests_guard.generate_request());
+                    drop(requests_guard);
+
+                    // Execute request
+                    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+                    trace!("VU started request: {:?}", request);
+                    
+                    // We run generation in a separate task to match backend interface which might block?
+                    // Actually Backend::generate is async. We can just await it if we want sequential execution within a VU.
+                    // The original start_vu spawned a thread for backend.generate(..., tx).
+                    // Let's stick to the pattern but without the overhead if possible.
+                    // But backend.generate takes a Sender.
+                    let backend_clone = backend.clone();
+                    let request_clone = request.clone();
+                    
+                    let gen_join = tokio::spawn(async move {
+                        backend_clone.generate(request_clone, tx).await;
+                    });
+
+                    // Forward responses
+                    while let Some(response) = rx.recv().await {
+                         if responses_tx.send(response).is_err() {
+                             // channel closed
+                             return;
+                         }
+                    }
+                    
+                    let _ = gen_join.await;
+                }
+                // Signal ended (one per VU, but we can just do one at the very end or not at all? 
+                // The original code sent new_as_ended() when duration reached.
+                // We should probably do that once per VU when it exits?
+                // Or just rely on the scheduler counting?
+                // The original code had: responses_tx.send(TextGenerationAggregatedResponse::new_as_ended());
+                // Let's send it when VU finishes naturally.
+                let _ = responses_tx.send(TextGenerationAggregatedResponse::new_as_ended());
+            });
         }
+
+        // Wait for all VUs to finish
         let mut stop_receiver = stop_sender.subscribe();
-        tokio::select! {
-            _ = stop_receiver.recv() => {
-                return;
-            },
-            _ = async {
-                // replenish VUs as they finish
-                while end_rx.recv().await.is_some() {
-                    active_vus.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
-                    if start.elapsed() > self.config.duration{
-                        // signal that the VU work is done
-                        let _ = responses_tx.send(TextGenerationAggregatedResponse::new_as_ended());
-                        info!("Duration reached, waiting for all VUs to finish...");
-                        if active_vus.load(std::sync::atomic::Ordering::SeqCst) == 0 {
-                            break;
+        
+        // We need to wait for either all tasks to join OR a stop signal.
+        loop {
+            tokio::select! {
+                _ = stop_receiver.recv() => {
+                    // Stop signal received. The VUs check this signal in their loop, 
+                    // but they might be stuck in backend.generate.
+                    // We can abort them.
+                    set.shutdown().await;
+                    return;
+                },
+                join_next = set.join_next() => {
+                    match join_next {
+                        Some(_) => {}, // A VU finished
+                        None => {
+                            // All VUs finished
+                            return;
                         }
-                    } else {
-                        let mut requests_guard = requests.lock().await;
-                        let request = Arc::from(requests_guard.generate_request());
-                        drop(requests_guard);
-                        active_vus.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                        start_vu(self.backend.clone(), request, responses_tx.clone(), end_tx.clone(), stop_sender.clone()).await;
                     }
                 }
-            }=>{}
+            }
         }
     }
 }
