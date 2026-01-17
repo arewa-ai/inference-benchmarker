@@ -59,7 +59,8 @@ def run(from_results_dir, datasource, port):
     df_bench = pd.DataFrame()
     line_plots_bench = []
     column_mappings = {'inter_token_latency_ms_p90': 'ITL P90 (ms)', 'time_to_first_token_ms_p90': 'TTFT P90 (ms)',
-                       'e2e_latency_ms_p90': 'E2E P90 (ms)', 'token_throughput_secs': 'Throughput (tokens/s)',
+                       'e2e_latency_ms_p90': 'E2E P90 (ms)', 'output_tok_throughput': 'Output Tok/s (Mdn/Mean)',
+                       'input_tok_throughput': 'Input Tok/s (Mdn/Mean)',
                        'successful_requests': 'Successful requests', 'error_rate': 'Error rate (%)', 'model': 'Model',
                        'rate': 'QPS', 'run_id': 'Run ID', 'system_info': 'System Info', 'experiment_info': 'Experiment Info', 'details': 'Details'}
     default_df = pd.DataFrame.from_dict(
@@ -84,15 +85,24 @@ def run(from_results_dir, datasource, port):
         data = df_bench.groupby(['model', 'run_id', 'rate']).agg(
             {'inter_token_latency_ms_p90': 'mean', 'time_to_first_token_ms_p90': 'mean',
              'e2e_latency_ms_p90': 'mean', 'token_throughput_secs': 'mean',
+             'input_token_throughput_secs': 'mean', 'token_throughput_median_secs': 'mean',
+             'input_token_throughput_median_secs': 'mean',
              'successful_requests': 'mean', 'error_rate': 'mean',
              'system_info': 'first', 'experiment_info': 'first', 'details': 'first'}).reset_index()
+        
+        # Combine Median and Mean for throughputs
+        data['output_tok_throughput'] = data.apply(lambda row: f"{row['token_throughput_median_secs']:.2f} / {row['token_throughput_secs']:.2f}", axis=1)
+        data['input_tok_throughput'] = data.apply(lambda row: f"{row['input_token_throughput_median_secs']:.2f} / {row['input_token_throughput_secs']:.2f}", axis=1)
+
         data = data[
             ['run_id', 'model', 'rate', 'inter_token_latency_ms_p90', 'time_to_first_token_ms_p90',
              'e2e_latency_ms_p90',
-             'token_throughput_secs', 'system_info', 'experiment_info', 'details']]
-        for metric in ['inter_token_latency_ms_p90', 'time_to_first_token_ms_p90', 'e2e_latency_ms_p90',
-                       'token_throughput_secs']:
+             'output_tok_throughput', 'input_tok_throughput', 'system_info', 'experiment_info', 'details']]
+        for metric in ['inter_token_latency_ms_p90', 'time_to_first_token_ms_p90', 'e2e_latency_ms_p90']:
             data[metric] = data[metric].apply(lambda x: f"{x:.2f}")
+
+        # Format rate (QPS) to 1 decimal
+        data['rate'] = data['rate'].apply(lambda x: f"{x:.1f}")
         
         # Wrap long content in details tag for collapsible view
         for col in ['system_info', 'experiment_info', 'details']:
@@ -145,6 +155,8 @@ def run(from_results_dir, datasource, port):
         "e2e_latency_ms": PlotConfig(title="End to End Latency (lower is better)", x_title="QPS",
                                      y_title="Time (ms)", percentiles=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]),
         "token_throughput_secs": PlotConfig(title="Request Output Throughput (higher is better)", x_title="QPS",
+                                            y_title="Tokens/s"),
+        "input_token_throughput_secs": PlotConfig(title="Request Input Throughput (higher is better)", x_title="QPS",
                                             y_title="Tokens/s"),
         "successful_requests": PlotConfig(title="Successful requests (higher is better)", x_title="QPS",
                                           y_title="Count"),
